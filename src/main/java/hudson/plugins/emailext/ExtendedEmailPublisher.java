@@ -19,6 +19,7 @@ import hudson.plugins.emailext.plugins.ContentBuilder;
 import hudson.plugins.emailext.plugins.CssInliner;
 import hudson.plugins.emailext.plugins.EmailTrigger;
 import hudson.plugins.emailext.plugins.EmailTriggerDescriptor;
+import hudson.scm.ChangeLogSet;
 import hudson.scm.ChangeLogSet.Entry;
 import hudson.tasks.BuildStepDescriptor;
 import hudson.tasks.BuildStepMonitor;
@@ -52,6 +53,7 @@ import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -508,7 +510,24 @@ public class ExtendedEmailPublisher extends Notifier implements MatrixAggregatab
             debug(listener.getLogger(), "Adding developers");
             Set<User> users;
             if (type.getIncludeCulprits()) {
-                users = build.getCulprits();
+                Set<User> upstreamUsers = new HashSet<User>();
+                Map<AbstractProject,Integer> upstreamBuilds = build.getTransitiveUpstreamBuilds();
+                for (Map.Entry<AbstractProject, Integer> upstreamBuildEntry : upstreamBuilds.entrySet()) {
+                    AbstractBuild upstreamBuild = (AbstractBuild) upstreamBuildEntry.getKey().getBuildByNumber(upstreamBuildEntry.getValue());
+                    ChangeLogSet<? extends ChangeLogSet.Entry> changeLogSet = upstreamBuild.getChangeSet();
+                    if(changeLogSet != null) {
+                        Iterator it =  changeLogSet.iterator();
+                        while (it.hasNext()){
+                            ChangeLogSet.Entry changeEntry = (ChangeLogSet.Entry) it.next();
+                            upstreamUsers.add(changeEntry.getAuthor());
+                        }
+                    }
+                }
+                //add original culprits
+                if (build.getCulprits() != null){
+                    upstreamUsers.addAll(build.getCulprits());
+                }
+                users = upstreamUsers;
             } else {
                 users = new HashSet<User>();
                 for (Entry change : build.getChangeSet()) {
